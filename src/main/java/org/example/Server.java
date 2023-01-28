@@ -30,14 +30,13 @@ public class Server {
     }
 
     public void listen(int port) {
+        out.println("Запускаем сервер...");
         try {
             serverSocket = new ServerSocket(port);
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
 
-    public void start() {
         while (true) {
             try {
                 final var socket = serverSocket.accept();
