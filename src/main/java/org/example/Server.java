@@ -14,28 +14,29 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.Map;
+import java.util.concurrent.*;
+
+import static java.lang.System.out;
 
 public class Server {
-    private final List<String> validPath = List.of("/index.html", "/spring.svg", "/spring.png",
-            "/resources.html", "/styles.css", "/app.js", "/links.html", "/forms.html",
-            "/classic.html", "/events.html", "/events.js");
-    private final int PORT = 9999;
+    private Map<String, Map<String, Handler>> handlers = new ConcurrentHashMap<>();
+
     private final ExecutorService executorService;
-    private final ServerSocket serverSocket;
+    private ServerSocket serverSocket;
 
     public Server() {
-        try {
-            serverSocket = new ServerSocket(PORT);
-            executorService = Executors.newFixedThreadPool(64);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        executorService = Executors.newFixedThreadPool(64);
     }
 
-    public void start() {
+    public void listen(int port) {
+        out.println("Запускаем сервер...");
+        try {
+            serverSocket = new ServerSocket(port);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
         while (true) {
             try {
                 final var socket = serverSocket.accept();
@@ -67,29 +68,49 @@ public class Server {
                     break;
                 }
 
-                final var path = parts[1];
-                if (!validPath.contains(path)) {
+                String requestMethod = parts[0];
+                String fullPath = parts[1];
+                String httpVersion = parts[2];
+                StringBuilder titles = new StringBuilder(" ");
+                StringBuilder body = new StringBuilder(" ");
+
+                while (in.ready()){
+                    String line = in.readLine();
+                    if(line.equals("\r\n")){
+                        break;
+                    }
+                    titles.append(line);
+                }
+                while (in.ready()){
+                    String line  = in.readLine();
+                    body.append(line);
+                }
+                Request request = new Request(requestMethod, fullPath, httpVersion, titles.toString(), body.toString());
+                if((!(handlers.containsKey(request.getRequestMethod()))) && (!(handlers.get(request.getRequestMethod()).containsKey(request.getPath())))){
                     notFound404(out);
                     break;
+                }else{
+                    handlers.get(request.getRequestMethod()).get(request.getPath()).handle(request, out);
                 }
-
-                final var filePath = Path.of(".", "public", path);
-                final var mimeType = Files.probeContentType(filePath);
-
-                // special case for classic
-                if (path.equals("/classic.html")) {
-                    classicPath(filePath, out, mimeType);
-                    break;
-
-                }
-                success200(filePath, out, mimeType);
             }
-        } catch (IOException ex) {
-            ex.printStackTrace();
+        }catch (IOException e){
+            e.printStackTrace();
+
+
+        }
+    }
+    public void addHandle(String requestMethod, String parth, Handler handler){
+        if(handlers.containsKey(requestMethod)){
+            handlers.get(requestMethod).put(parth, handler);
+        }else {
+            handlers.put(requestMethod, new ConcurrentHashMap<>());
+            handlers.get(requestMethod).put(parth,handler);
         }
     }
 
-    private void success200(Path filePath, OutputStream out, String mimeType) {
+    public static void success200(Request request, BufferedOutputStream out) throws IOException {
+        final var filePath = Path.of(".", "public", request.getPath());
+        final var mimeType = Files.probeContentType(filePath);
         try {
             final var length = Files.size(filePath);
             out.write((
@@ -106,7 +127,9 @@ public class Server {
         }
     }
 
-    private void classicPath(Path filePath, OutputStream out, String mimeType) {
+    private static void classicPath(Request request, BufferedOutputStream out) throws IOException {
+        final var filePath = Path.of(".", "public", request.getPath());
+        final var mimeType = Files.probeContentType(filePath);
         try {
             final var template = Files.readString(filePath);
             final var content = template.replace(
@@ -128,7 +151,7 @@ public class Server {
         }
     }
 
-    private void notFound404(OutputStream out) {
+    private static void notFound404(OutputStream out) {
         try {
             out.write((
                     "HTTP/1.1 404 Not Found\r\n" +
