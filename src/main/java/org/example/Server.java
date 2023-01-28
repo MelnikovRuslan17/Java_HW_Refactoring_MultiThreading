@@ -70,9 +70,9 @@ public class Server {
 
                 String requestMethod = parts[0];
                 String fullPath = parts[1];
-                String httpVerion = parts[2];
-                StringBuilder titles = new StringBuilder("");
-                StringBuilder body = new StringBuilder("");
+                String httpVersion = parts[2];
+                StringBuilder titles = new StringBuilder(" ");
+                StringBuilder body = new StringBuilder(" ");
 
                 while (in.ready()){
                     String line = in.readLine();
@@ -85,7 +85,7 @@ public class Server {
                     String line  = in.readLine();
                     body.append(line);
                 }
-                Request request = new Request(requestMethod, fullPath, httpVerion, titles.toString(), body.toString());
+                Request request = new Request(requestMethod, fullPath, httpVersion, titles.toString(), body.toString());
                 if((!(handlers.containsKey(request.getRequestMethod()))) && (!(handlers.get(request.getRequestMethod()).containsKey(request.getPath())))){
                     notFound404(out);
                     break;
